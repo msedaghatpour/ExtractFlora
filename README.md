@@ -1,9 +1,8 @@
-# ExtractFlora 1.0:
+# ExtractFlora 1.0: A pipeline for transforming a flora into a database for ecological and evolutionary study
 
 Version 1.0 of ExtractFlora pipeline. This first version is a "soft launch" to accompany Chapter 1 of Sedaghatpour, (2024).
 
-Sedaghatpour, M. (2024). Spatial and phylogenetic insights into floristic diversity across the mediterranean Bilad al Sham [Doctoral dissertation, University of California, Berkeley].
-
+Sedaghatpour, M. (2024). Spatial and phylogenetic insights into floristic diversity across the mediterranean Bilad al Sham [Unpublished doctoral dissertation]. University of California, Berkeley.
 
 
 Important dependencies / prereqs:
