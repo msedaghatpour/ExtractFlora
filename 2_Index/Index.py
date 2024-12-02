@@ -19,7 +19,7 @@ import datetime
 from datetime import date # Import date class from datetime module for saving
 
 # Set directory 
-os.chdir('/Users/maryamsedaghatpour/Desktop/extract-flora/shidedh:ExtractFloraOrganizedV0-p0_draft2024Nov18')
+os.chdir('/Users/maryamsedaghatpour/Desktop/extract-flora/ExtractFlora-v1.0')
 
 # Return current local date
 today = date.today()
@@ -72,8 +72,8 @@ vol3_index = list(range(555, 583))
 # #### Setting Global parameters
 
 # %%
-TARGET_DPI = 150 # makes bboxes too thick 
-# TARGET_DPI = 300 # gives DecompressionBombError when printing strict matches PDF
+TARGET_DPI = 100 # prints bboxes too thick 
+# TARGET_DPI = 300 # DecompressionBombError when printing strict matches PDF. limit of 89478485 pixels
 mat = fitz.Matrix(TARGET_DPI/ 72, TARGET_DPI/ 72)
 
 # %% [markdown]
@@ -109,7 +109,7 @@ def get_col(coords, center_x0):
     return int(x0 >= center_x0)
 
 # %%
-
+# determine index columns 
 all_vol_data_col_num = [(vol1_char_df, vol1_index, vol1_doc),
                         (vol2_char_df, vol2_index, vol2_doc),
                         (vol3_char_df, vol3_index, vol3_doc)]
@@ -127,7 +127,7 @@ for vol_char_df ,vol_index, doc in all_vol_data_col_num:
 
 # %% [markdown]
 # ### Genus / epithet flagging 
-# flagging pages where number of strict genus or epithet patern matches is less than 3 per column
+# flagging pages where number of strict genus or epithet pattern matches is less than 3 per column
 
 # %%
 # create list of tuples for volumes
@@ -135,6 +135,7 @@ all_vol_data_flagg_strict_match = [(vol1_char_df, vol1_index, vol1_doc, "strict_
                                    (vol2_char_df, vol2_index, vol2_doc, "strict_match_vol2"),
                                    (vol3_char_df, vol3_index, vol3_doc, "strict_match_vol3")]
 
+# find strict matches
 for vol_char_df, vol_index, vol_doc, output_name in all_vol_data_flagg_strict_match: 
     #for each volume 
     image_list = []
@@ -500,17 +501,24 @@ vol1_char_df.loc[target_index, 'genus_coord_match'] = True
 # all_vol_data_coord_match = [(vol1_char_df, vol1_index),
 # (vol2_char_df, vol2_index),
 # (vol3_char_df, vol3_index)]
-
+# doing what? 
 for vol_char_df, vol_index in all_vol_data_coord_match: 
     vol_char_df["infra_coord_match"] = vol_char_df["word_bbox"].apply(lambda x : False)
     for page_num in tqdm(vol_index,  desc = "Doing something"):
-        margin = 1.25 * vol_char_df[(vol_char_df["species_coord_match"] == True) | (vol_char_df["genus_coord_match"] == True)]["char_bbox"].apply(lambda x : x[2] - x[0]).mean()
+        margin = 1.25 * vol_char_df[(vol_char_df["species_coord_match"] == True) | 
+                                    (vol_char_df["genus_coord_match"] == True)]["char_bbox"].apply(lambda x : x[2] - x[0]).mean()
         
-        mean_left_epithet = vol_char_df[(vol_char_df["page_num"] == page_num) & (vol_char_df["col_num"] == 0) & (vol_char_df["species_coord_match"] == True)]["word_bbox"].apply(lambda x : x[0]).mean()
-        mean_left_genus = vol_char_df[(vol_char_df["page_num"] == page_num) & (vol_char_df["col_num"] == 0) & (vol_char_df["genus_coord_match"] == True)]["word_bbox"].apply(lambda x : x[0]).mean()
+        mean_left_epithet = vol_char_df[(vol_char_df["page_num"] == page_num) & 
+                                        (vol_char_df["col_num"] == 0) & 
+                                        (vol_char_df["species_coord_match"] == True)]["word_bbox"].apply(lambda x : x[0]).mean()
+        mean_left_genus = vol_char_df[(vol_char_df["page_num"] == page_num) & 
+                                      (vol_char_df["col_num"] == 0) & 
+                                      (vol_char_df["genus_coord_match"] == True)]["word_bbox"].apply(lambda x : x[0]).mean()
         if math.isnan(mean_left_genus):
-            mean_left_genus_all = vol_char_df[(vol_char_df["col_num"] == 0) & (vol_char_df["genus_coord_match"] == True)]["word_bbox"].apply(lambda x : x[0]).mean()
-            mean_left_epithet_all = vol_char_df[(vol_char_df["col_num"] == 0) & (vol_char_df["species_coord_match"] == True)]["word_bbox"].apply(lambda x : x[0]).mean()
+            mean_left_genus_all = vol_char_df[(vol_char_df["col_num"] == 0) & 
+                                              (vol_char_df["genus_coord_match"] == True)]["word_bbox"].apply(lambda x : x[0]).mean()
+            mean_left_epithet_all = vol_char_df[(vol_char_df["col_num"] == 0) & 
+                                                (vol_char_df["species_coord_match"] == True)]["word_bbox"].apply(lambda x : x[0]).mean()
             mean_left_tab = mean_left_epithet_all - mean_left_genus_all
         else: 
             mean_left_tab = mean_left_epithet - mean_left_genus
@@ -1101,7 +1109,7 @@ for vol_index_df in vol_index_df_list:
 vol1_index_df, vol2_index_df, vol3_index_df = result_df[0], result_df[1], result_df[2]
 
 # %%
-def is_hybrid(word):
+def hybrid_symbol(word):
     infra_symbols = r"^X[\s|.|\b]?$|^x[\s|.|\b]?$|^×[\s|.|\b]?$"
     return re.search(infra_symbols, word) != None
 
@@ -1109,10 +1117,12 @@ def is_hybrid(word):
 result_df_hybrids = []
 for vol_index_df in [vol1_index_df, vol2_index_df, vol3_index_df]:
     vol_index_df['is_hybrid'] = np.nan
-    vol_index_df.loc[(vol_index_df['potential_infra_match'] == True) | (vol_index_df['species_coord_match'] == True) | (vol_index_df['genus_coord_match'] == True), 'is_hybrid'] = (vol_index_df['word'].apply(is_hybrid) == True) & ((vol_index_df['potential_infra_match'] == True) | (vol_index_df['species_coord_match'] == True) | (vol_index_df['genus_coord_match'] == True))
+    vol_index_df.loc[(vol_index_df['potential_infra_match'] == True) | 
+                     (vol_index_df['species_coord_match'] == True) | 
+                     (vol_index_df['genus_coord_match'] == True), 'is_hybrid'] = (vol_index_df['word'].apply(hybrid_symbol) == True) & ((vol_index_df['potential_infra_match'] == True) | (vol_index_df['species_coord_match'] == True) | (vol_index_df['genus_coord_match'] == True))
     
-    hybrid_genera_indecies = vol_index_df[(vol_index_df['genus_coord_match'] == True) & (vol_index_df['word'].apply(is_hybrid) == True)].index + 1
-    hybrid_epithet_indecies = vol_index_df[(vol_index_df['species_coord_match'] == True) & (vol_index_df['word'].apply(is_hybrid) == True)].index + 1
+    hybrid_genera_indecies = vol_index_df[(vol_index_df['genus_coord_match'] == True) & (vol_index_df['word'].apply(hybrid_symbol) == True)].index + 1
+    hybrid_epithet_indecies = vol_index_df[(vol_index_df['species_coord_match'] == True) & (vol_index_df['word'].apply(hybrid_symbol) == True)].index + 1
     
     vol_index_df.loc[hybrid_epithet_indecies, 'is_hybrid'] = True
     vol_index_df.loc[hybrid_epithet_indecies, 'species_coord_match'] = True 
@@ -1176,7 +1186,7 @@ for vol_index_df in [vol1_index_df, vol2_index_df, vol3_index_df]:
 # %%
 for vol_index_df in [vol1_index_df, vol2_index_df, vol3_index_df]:
     cond = ((vol_index_df['closest_infra_name'] != '') | (vol_index_df['closest_infra_name'] != -1) | (~vol_index_df['closest_infra_name'].isna())) & \
-           (vol_index_df['word'].apply(is_hybrid) == True)
+           (vol_index_df['word'].apply(hybrid_symbol) == True)
     
     vol_index_df.loc[cond, 'is_hybrid'] = True
     vol_index_df['is_hybrid'].ffill(inplace=True)
@@ -1199,6 +1209,11 @@ author_grouping = ['closest_genus', 'closest_epithet', 'closest_infra_name']
 merge_on = ['closest_genus', 'closest_epithet', 'closest_infra_name']
 def concatenate(group):
     return group.loc[group['potential_author_match'] == True, 'word'].str.cat(sep=' ')
+# DeprecationWarning: DataFrameGroupBy.apply operated on the grouping columns. 
+# This behavior is deprecated, and in a future version of pandas the grouping columns will be excluded from the operation. 
+# Either pass `include_groups=False` to exclude the groupings or explicitly select the grouping columns after groupby 
+# to silence this warning.
+
 
 result_df_authors = [] 
 for vol_index_df in [vol1_index_df, vol2_index_df, vol3_index_df]: 
@@ -1298,14 +1313,15 @@ prune_authors_vol1.loc[cond, 'authors'] = prune_authors_vol1.loc[cond,'authors']
 
 # %%
 
-def get_rank_specific(row):
+def get_rank(row):
     has_genus = (pd.isnull(row['closest_genus']) == False) & (row['closest_genus'] != "") & (row['closest_genus'] != -1)
     has_epithet = (pd.isnull(row['closest_epithet']) == False) & (row['closest_epithet'] != "") & (row['closest_epithet'] != -1)
-    
     has_infra = (pd.isnull(row['closest_infra_name']) == False) & (row['closest_infra_name'] != "") & (row['closest_infra_name'] != -1)
     has_infra_type = (pd.isnull(row['closest_infra_type']) == False) & (row['closest_infra_type'] != "") & (row['closest_infra_type'] != -1)
     infra_type = row['closest_infra_type']
-    is_infra_hybrid = is_hybrid(row['closest_infra_type']) == True
+    
+    is_infra_hybrid = hybrid_symbol(row['closest_infra_type']) == True # crash here from is_hybrid ? UnboundLocalError: local variable 'is_hybrid' referenced before assignment
+
     if is_infra_hybrid:
         infra_type = "hybrid"
     
@@ -1320,6 +1336,7 @@ def get_rank_specific(row):
     if has_genus:
         return prefix + "genus"
 
+# remove function? 
 def get_rank_general(row):
     has_genus = (pd.isnull(row['closest_genus']) == False) & (row['closest_genus'] != "") & (row['closest_genus'] != -1)
     has_epithet = (pd.isnull(row['closest_epithet']) == False) & (row['closest_epithet'] != "") & (row['closest_epithet'] != -1)
@@ -1351,7 +1368,7 @@ prune_authors_vol3['closest_infra_name'] = prune_authors_vol3['closest_infra_nam
 
 for vol_index_df in [prune_authors_vol1, prune_authors_vol2, prune_authors_vol3]:
     vol_index_df['taxon_rank'] = vol_index_df.apply(get_rank_general, axis = 1)
-    vol_index_df['taxon_rank_detailed'] = vol_index_df.apply(get_rank_specific, axis = 1)
+    vol_index_df['taxon_rank_detailed'] = vol_index_df.apply(get_rank, axis = 1)
 
 # %%
 
