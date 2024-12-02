@@ -15,7 +15,7 @@ Built for Python 3.10 on darwin (64-bit).
     - NOUVELLE FLORE DU LIBAN ET DE LA SYRIE 2.pdf
     - NOUVELLE FLORE DU LIBAN ET DE LA SYRIE 3.pdf
     - vol2_last_8_pages.pdf
-- pandas, PyMuPDF (fitz) -- version 1.21.1, matplotlib, tqdm, difflib, seaborn, etc.
+- pandas, PyMuPDF (fitz) -- version 1.21.1, matplotlib, tqdm, difflib, seaborn, unidecode, etc.
 
 Order of running scripts:
 - prereqs (above section)
@@ -27,3 +27,5 @@ Order of running scripts:
     - 1_find_entry_boxes.py
     - 2_entry_bbox_page_cont.py
     - 3_parsing_locations.py
+
+To run pipeline all at once, execute run_pipeline_basic.sh or run_pipeline.sh directly from command line. Intended to be run in one calendar day. 
