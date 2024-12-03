@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # ExtractFlora/MainText script 3
 # parsing within sp entry
 # October 2024 update
@@ -23,7 +24,7 @@ from unidecode import unidecode
 # --------------------------------------------------- #
 
 # Set directory 
-os.chdir('/Users/maryamsedaghatpour/Desktop/extract-flora/shidedh:ExtractFloraOrganizedV0-p0_draft2024Nov18/')
+os.chdir('/Users/maryamsedaghatpour/Desktop/extract-flora/ExtractFlora-v1.0')
 
 # Return current local date for saving
 today = date.today()
@@ -50,13 +51,13 @@ vol3_pages = [vol3_doc[i] for i in range(vol3_doc.page_count)]
 # Find the all folders that start with output
 output_folders = [folder for folder in os.listdir(".") 
                if folder.startswith("output") and folder != "output"]
-print(output_folders)
+# print(output_folders)
 
 output_folders.sort(                   # Sort folders by date, descending order
-    key=lambda x: datetime.datetime.strptime(x[6:],"%Y%b%d"), # 6 bc "output" is 6 letters
+    key=lambda x: datetime.datetime.strptime(x[6:],"%Y%b%d"),
     reverse=True)
 output_dir = output_folders[0]         # clean
-print(output_dir)
+print(f"getting data from {output_dir}")
 
 # load preprocessed df 
 vol1_char_df = pd.read_pickle(f"{output_dir}/char_df/vol1_df.pkl")
@@ -79,6 +80,7 @@ vol2_index_df.rename(columns={'closest_genus': 'mouterde_genus', 'closest_epithe
 vol3_index_df.rename(columns={'closest_genus': 'mouterde_genus', 'closest_epithet': 'mouterde_epithet', 'authors':'mouterde_author', 'closest_infra_name':'mouterde_infra'}, inplace=True)
 # # ---------------------------------------------------------------- #
 
+# create new dfs from preprocessed df
 vol1_word_df = vol1_char_df.loc[:, ['vol_num', 'page_num', 
                                     'block_num', 'block_num_absolute', 'block_bbox',
                                     'line_num', 'line_wmode', 'line_dir', 'line_bbox', 
@@ -98,21 +100,20 @@ vol3_word_df = vol3_char_df.loc[:, ['vol_num', 'page_num',
                                     'word_num', 'word','word_bbox', 'pruned_word', 'pruned_word_bbox','char_bbox']].drop_duplicates()
 
 # %%
+# reset doc:
 vol1_doc = fitz.open(vol1_path)
 vol2_doc = fitz.open(vol2_path)
 vol3_doc = fitz.open(vol3_path)
 
+
 # %%
-# list of genera from index -- uppercased to match main text pattern
-
-
-# THIS IS ALL ONE BIG FUNCTION
 # --------------------- processing functions --------------------- #
 def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volume_doc):
     vol_genera = volume_index_df[volume_index_df['taxon_rank'] == 'genus']['mouterde_genus'].str.upper().tolist()
 
     #list of species binomial from main text
-    vol_species_temp_df = volume_index_df[(volume_index_df['taxon_rank'] == 'epithet') & (~volume_index_df['mouterde_genus'].isna())]
+    vol_species_temp_df = volume_index_df[(volume_index_df['taxon_rank'] == 'epithet') & 
+                                          (~volume_index_df['mouterde_genus'].isna())]
     vol_species_binomial_list = list(zip(vol_species_temp_df['mouterde_genus'], vol_species_temp_df['mouterde_epithet']))
     vol_species = list(map(lambda x: f"{x[0]} {x[1]}", vol_species_binomial_list))
     vol_species_abriviation = list(map(lambda x: f"{x[0][0]}. {x[1]}", vol_species_binomial_list))
@@ -126,15 +127,22 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
     tqdm.pandas()
 
     # %%
-    # read in data 
-    # change
+    # read in data per volume
     volume_word_df = pd.read_pickle(f"{output_dir}/desc_box_df/{volume}_desc_df_v2.pkl")
 
     # %%
-    is_binomial = ((~(volume_word_df['1_flags'].apply(is_italic)) & (volume_word_df['1_words_match_score'] > 0.85)) | 
-                (~(volume_word_df['2_flags'].apply(is_italic)) & (volume_word_df['2_words_match_score'] > 0.85)) | 
-                (~(volume_word_df['3_flags'].apply(is_italic)) & (volume_word_df['3_words_match_score'] > 0.85)) | 
-                (~(volume_word_df['1_flags'].apply(is_italic)) & (volume_word_df['1_words_match_score'] > 0.85))) 
+    #############
+    ###### move to script 2 ?
+    # determine binomial lines again
+    is_binomial = ((~(volume_word_df['1_flags'].apply(is_italic)) & 
+                    (volume_word_df['1_words_match_score'] > 0.85)) | 
+                (~(volume_word_df['2_flags'].apply(is_italic)) & 
+                 (volume_word_df['2_words_match_score'] > 0.85)) | 
+                (~(volume_word_df['3_flags'].apply(is_italic)) & 
+                 (volume_word_df['3_words_match_score'] > 0.85)) | 
+                (~(volume_word_df['1_flags'].apply(is_italic)) & 
+                 (volume_word_df['1_words_match_score'] > 0.85))) 
+    
     binom_page_num = volume_word_df[(is_binomial)]['page_num']
     binom_block_num = volume_word_df[(is_binomial)]['block_num']
     binom_line_num = volume_word_df[(is_binomial)]['line_num']
@@ -147,16 +155,19 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
 
     # %%
     # Calculate Binomial Character Width
-    binom_char_width = volume_char_binom_df.groupby('line_id')['char_bbox'].transform(lambda x: x.apply(lambda y: y[2] - y[0])).mean()
+    binom_char_width = volume_char_binom_df.groupby('line_id')['char_bbox']\
+        .transform(lambda x: x.apply(lambda y: y[2] - y[0])).mean()
     binom_char_width
 
     # %%
     # For each page, calculates mean x-coordinate of first character in each binomial line
     num_pages = volume_word_df['page_num'].max() + 1
     for page_num in tqdm(range(num_pages), desc = "calculating mean x-coord"):
-        volume_word_df.loc[volume_word_df['page_num'] == page_num, 'mean_binom_x0'] = volume_word_df[(volume_word_df['page_num'] == page_num) & (volume_word_df['line_id'].isin(binom_id))]['line_bbox'].apply(lambda x : x[0]).mean()
+        volume_word_df.loc[volume_word_df['page_num'] == page_num, 'mean_binom_x0'] = volume_word_df[(volume_word_df['page_num'] == page_num) & 
+                                                                                                     (volume_word_df['line_id'].isin(binom_id))]['line_bbox'].apply(lambda x : x[0]).mean()
 
     # %%
+    # threshold 
     accepted_error = (binom_char_width)*2.5 # eyeballing it ...
 
     def is_binom_indent(row):
@@ -167,7 +178,7 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
 
     volume_word_df['is_binom_indent'] = volume_word_df.progress_apply(is_binom_indent, axis = 1)
 
-    # %%
+    # %% view
     volume_word_df['section_break']
 
     # %%
@@ -179,12 +190,15 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
             return row['line_id']
         else:
             return np.nan
+##### end move to script 2?
+##############
 
     volume_word_df['entry_id'] = volume_word_df.progress_apply(entry_id, axis = 1)
     volume_word_df['entry_id'].ffill(inplace=True)
 # FutureWarning: A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.
 # The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
-# For example, 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+# For example, 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, 
+# to perform the operation inplace on the original object.
 
 
     # %%
@@ -207,128 +221,24 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
     #drop extra cols:
     volume_word_df.drop(columns= ["line_x0", "line_y0", "line_x1", "line_y1", "paragraph_x0", "paragraph_y0", "paragraph_x1", "paragraph_y1"], inplace = True)
 
-    # %%
-    # render PDF of parsed spp entries
-    for page_num in tqdm(range(num_pages), desc= "rendering PDF 1"):
-        section_groups = volume_word_df[volume_word_df['page_num'] == page_num].groupby('section_id')
-        page = volume_doc[page_num]
-        colors = [getColor("plum"), getColor("orchid4")]
-        
-        paragraph_groups = volume_word_df[volume_word_df['page_num'] == page_num].groupby('entry_id')
-        for name, paragraph in paragraph_groups:
-            i = 0
-            entry_id = paragraph.iloc[0]['entry_id']
-            paragraph_section_id = paragraph.iloc[0]['section_id']
-            paragraph_bbox = paragraph.iloc[0]['paragraph_bbox']
-            is_L_loc = paragraph.iloc[0]['word'].lower() in ["l.", "l"]
-            is_S_loc = paragraph.iloc[0]['word'].lower() in ["s.", "s"]
-            
-            c = getColor("lightgray")         # default color 
-            if is_L_loc: 
-                c = getColor("lightblue")
-            if is_S_loc:
-                c = getColor("pink")
-            if paragraph_section_id in binom_id:
-                r_box = fitz.Rect(paragraph_bbox)
-                annot_rect = page.add_rect_annot(r_box)
-                annot_rect.set_colors({"stroke":c})
-                annot_rect.update()
-                i += 1
-            c = getColor("lightgray")            # reset color? 
-
-        for name, section in section_groups:
-            section_id = section.iloc[0]['section_id']
-            section_bbox = section.iloc[0]['section_bbox']
-            if section_id in binom_id:
-                r_box = fitz.Rect(section_bbox)
-                #r_box.set_stroke_color(stroke=getColor("violetred4"))
-                annot_rect = page.add_rect_annot(r_box)
-                annot_rect.set_colors({"stroke": getColor("violetred4")})
-                annot_rect.update()
-    marked_epithet_fname = f"{output_dir}/{volume}_binom_sections_paragraphs_LS_v1.pdf"
-    volume_doc.save(marked_epithet_fname)
-
-    # %%
+    # %% view 
     volume_word_df.columns
 
-    # %%
-    volume_word_df['pruned_word']
-
-    # %%
-    [getColor("darkpink"), getColor("lightblue")]
+    # %% view
+    volume_word_df['pruned_word'] 
 
     # %%
     # Create a new image with a solid color
     width = 50
     height = 50
-    colors = [getColor("pink"), getColor("lightblue"),  getColor("lightgray")]
+    colors = [getColor("pink"), getColor("lightblue"),  getColor("lightgray"), getColor("lightgreen"), getColor("violetred4"), getColor("plum"), getColor("orchid4")]
     for color_1 in colors:
         color_255 = tuple(int(c_val*255) for c_val in color_1) # red color
         image = Image.new("RGB", (width, height), color_255)
         image.show()
-    # Display the image
+    # Display the image (print temp.png)
     image
-
-      # %% [markdown] begin duplicated part to remove 
-#     # section title:  L.Break 
-#     # ### parse L. and S. repeated below to set up long loop
-#     # %%
-#     paragraph_groups = volume_word_df.groupby('entry_id')
-#     volume_word_df['paragraph_word_num'] = paragraph_groups.cumcount() + 1
-#     paragraph_groups_123 = volume_word_df[volume_word_df['page_num'] == 123].groupby('entry_id')
-#     for name, paragraph in paragraph_groups_123:
-#         is_L_loc = paragraph.iloc[0]['word'].lower() in ["l.", "l"]
-#         if is_L_loc:
-#             break
-#     # %%
-#     # VOL1 ONLY
-#     # checking if paragraph_word_num works correctly when section paragraph acrros 2 pages accross
-#     # HC_id = volume_word_df[volume_word_df['4_words'] == "Heteropogon con tort us"]['entry_id'].iloc[0]
-#     # volume_word_df[(volume_word_df['entry_id'] == HC_id)]['paragraph_word_num']
-#     # %%
-#     " ".join(paragraph['word'])
-#     # %%
-#     paragraph
-# # end duplicated part to remove 
-   
-#     # %% start duplicated part to remove 
-#     # extract locations in italicized text (general locations) seperated by L. and S.
-#     # section title: L.S.brief 
-#     # breifer version of for loop below? 
-#     paragraph_italics_list = (paragraph[paragraph['span_flags'].apply(is_italic)]['paragraph_word_num'] -1).tolist()
-#     paragraph_italics_list.append((paragraph['paragraph_word_num']).max())
-#     sub_loc_dict = {}
-#     paragraph_text = paragraph['word'].tolist()
-#     for i in range(len(paragraph_italics_list) - 1):
-#         curr_word_i = int(paragraph_italics_list[i])
-#         next_word_i = int(paragraph_italics_list[i+1]) #only works if the last word of L. is not italics
-#         sub_loc_italics = paragraph_text[curr_word_i]
-#         sub_location_list = paragraph_text[curr_word_i + 1: next_word_i]
-#         sub_location_str = " ".join(sub_location_list)
-#         # make dict for L. / S. whenever it exists.
-#         sub_loc_result = [match_s.strip() for match_s in re.findall(r'([^,()]+?)(?=[,(])(?![^()]*\))', sub_location_str)]
-#         paragraph_section_id = paragraph['section_id'].iloc[0]
-#         try:
-#             sub_loc_dict[paragraph_section_id]
-#         except:
-#             sub_loc_dict[paragraph_section_id] = {}
-#         if paragraph_text[0].lower() in ['l.', 'l']:
-#             try: 
-#                 sub_loc_dict[paragraph_section_id]['L.']
-#             except: 
-#                 sub_loc_dict[paragraph_section_id]['L.'] = []
-#             sub_loc_dict[paragraph_section_id]['L.'].append({sub_loc_italics: sub_loc_result})
-#         if paragraph_text[0].lower() in ['s.', 's']:
-#             try: 
-#                 sub_loc_dict[paragraph_section_id]['S.']
-#             except: 
-#                 sub_loc_dict[paragraph_section_id]['S.'] = []
-#             sub_loc_dict[paragraph_section_id]['S.'].append({sub_loc_italics: sub_loc_result})
-#     # %% save 
-#     marked_epithet_fname = f"output2024Nov28/{volume}_binom_sections_paragraphs_LS_parsed_v0.pdf"
-#     volume_doc.save(marked_epithet_fname)
-# # end duplicated part to remove 
-
+ 
 
     # %%
     # calculate similarity scores of normalized text
@@ -366,21 +276,24 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
             
         # iterate over pairs of consecutive italicized words    
         for i in range(len(paragraph_italics_list) - 1):
-            curr_word_i = int(paragraph_italics_list[i]) # store current word index
-            next_word_i = int(paragraph_italics_list[i+1]) # store next word index. #only works if the last word of L. is not italics. last sub-location might not extract correctly.
-            sub_loc_italics = paragraph_text[curr_word_i]  # Extract italicized word 
+            curr_word_i = int(paragraph_italics_list[i])    # store current word index
+            next_word_i = int(paragraph_italics_list[i+1])  # store next word index. #only works if the last word of L. is not italics. last sub-location might not extract correctly.
+            sub_loc_italics = paragraph_text[curr_word_i]   # Extract italicized word 
             sub_location_list = paragraph_text[curr_word_i + 1: next_word_i]   # extract sub locality
             sub_location_str = " ".join(sub_location_list)  # join specific localities into a string
             # make dict for L. / S. whenever it exists.
             
             sub_loc_result = [match_s.strip() for match_s in re.findall(r'([^,()]+?)(?=[,(])(?![^()]*\))', sub_location_str)]
 
+            # extract non-italisized text (specific locals)
             if no_italics_line:
                 sub_loc_italics = 'NO ITALICS'
-                sub_location_list = paragraph_text[curr_word_i: next_word_i]
+                sub_location_list = paragraph_text[curr_word_i: next_word_i] 
                 sub_loc_result = [" ".join(sub_location_list)]
                     
-            paragraph_section_id = paragraph['section_id'].iloc[0]
+            paragraph_section_id = paragraph['section_id'].iloc[0] # extract section_id from first row of paragraph
+            # check if paragraph_section_id exists as a key in sub_loc_dict dictionary.
+            # If it doesn't exist, create new empty dictionary for that key. 
             try:
                 sub_loc_dict[paragraph_section_id]
             except:
@@ -392,10 +305,10 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
                 other_data[paragraph_section_id] = {}
             
             aire_geogr_match = closest_norm_match(" ".join(paragraph_text[:2]), "aire géogr.") > 0.9
-            L_match = paragraph_text[0].lower() in ['l.', 'l']
-            S_match = paragraph_text[0].lower() in ['s.', 's']
+            L_match = paragraph_text[0].lower() in ['l.', 'l']       # does paragraph start with L?
+            S_match = paragraph_text[0].lower() in ['s.', 's']      # does paragraph start with S?
             floraison_match = closest_norm_match(paragraph_text[0], "Floraison:") > 0.9
-            is_description = paragraph_section_id == name
+            is_description = paragraph_section_id == name             # for sp description
             if L_match:
                 try: 
                     sub_loc_dict[paragraph_section_id]['L.']
@@ -434,12 +347,20 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
                 except:
                     other_data[paragraph_section_id]["other"] = [] 
                 other_data[paragraph_section_id]["other"].append([" ".join(paragraph_text)])
-    # end of "doing something 1" ?
+    # end of LONG LOOP
+
+
+    
     # %%
-    is_binomial = ((~(volume_word_df['1_flags'].apply(is_italic)) & (volume_word_df['1_words_match_score'] > 0.85)) | 
-                (~(volume_word_df['2_flags'].apply(is_italic)) & (volume_word_df['2_words_match_score'] > 0.85)) | 
-                (~(volume_word_df['3_flags'].apply(is_italic)) & (volume_word_df['3_words_match_score'] > 0.85)) | 
-                (~(volume_word_df['1_flags'].apply(is_italic)) & (volume_word_df['1_words_match_score'] > 0.85))) 
+    # identify binomials again (remove?)
+    is_binomial = ((~(volume_word_df['1_flags'].apply(is_italic)) & 
+                    (volume_word_df['1_words_match_score'] > 0.85)) | 
+                (~(volume_word_df['2_flags'].apply(is_italic)) & 
+                 (volume_word_df['2_words_match_score'] > 0.85)) | 
+                (~(volume_word_df['3_flags'].apply(is_italic)) & 
+                 (volume_word_df['3_words_match_score'] > 0.85)) | 
+                (~(volume_word_df['1_flags'].apply(is_italic)) & 
+                 (volume_word_df['1_words_match_score'] > 0.85))) 
 
     # remove function? replaced with get_binomial() below. 
     def get_binomial_string(row):
@@ -457,30 +378,36 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
     volume_word_df['binom_string'] = volume_word_df.apply(get_binomial_string, axis = 1)
 
     # %%
-    is_binomial = ((~(volume_word_df['1_flags'].apply(is_italic)) & (volume_word_df['1_words_match_score'] > 0.85)) | 
-                (~(volume_word_df['2_flags'].apply(is_italic)) & (volume_word_df['2_words_match_score'] > 0.85)) | 
-                (~(volume_word_df['3_flags'].apply(is_italic)) & (volume_word_df['3_words_match_score'] > 0.85)) | 
-                (~(volume_word_df['1_flags'].apply(is_italic)) & (volume_word_df['1_words_match_score'] > 0.85))) 
+    # identify binomials again (remove?)
+    # is_binomial = ((~(volume_word_df['1_flags'].apply(is_italic)) & (volume_word_df['1_words_match_score'] > 0.85)) | 
+    #             (~(volume_word_df['2_flags'].apply(is_italic)) & (volume_word_df['2_words_match_score'] > 0.85)) | 
+    #             (~(volume_word_df['3_flags'].apply(is_italic)) & (volume_word_df['3_words_match_score'] > 0.85)) | 
+    #             (~(volume_word_df['1_flags'].apply(is_italic)) & (volume_word_df['1_words_match_score'] > 0.85))) 
+    
+    # view
     volume_word_df[is_binomial]
 
-    # %%
+    # %% view filter df page number between 78 and 606 (specific to vol 1)
     volume_word_df[(is_binomial==True) & (volume_word_df['page_num'] >= 78) & (volume_word_df['page_num'] <= 606)]
 
-    # %%
-    len(volume_word_df[(is_binomial==True) & (volume_word_df['page_num'] >= 78) & (volume_word_df['page_num'] <= 606)].groupby('section_id'))
+    # %% view
+    len(volume_word_df[(is_binomial==True) & 
+                       (volume_word_df['page_num'] >= 78) & 
+                       (volume_word_df['page_num'] <= 606)].groupby('section_id'))
 
-    # %%
-    volume_word_df[(volume_word_df['binom_section']) &  (volume_word_df['page_num'] >= 78) & (volume_word_df['page_num'] <= 606)].groupby('section_id').first()['binom_string']
+    # %% view
+    volume_word_df[(volume_word_df['binom_section']) &  
+                   (volume_word_df['page_num'] >= 78) & 
+                   (volume_word_df['page_num'] <= 606)].groupby('section_id').first()['binom_string']
 
-    # %%
+    # %% view columns
     volume_word_df.columns
 
     # %%
     section_groups = volume_word_df.groupby('section_id')
 
-    # ### get binomial name the way I did it in Aaron's code :) 
-
-    # %%
+    # %% Aarons method?
+    # why is this down here? 
     def get_binomial(row):
         combs = [(row['1_words'], row['1_flags'], row['1_words_match_score']),
                 (row['2_words'], row['2_flags'], row['2_words_match_score']),
@@ -499,17 +426,22 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
     boxes = []
 
     volume_word_df['binom_bbox'] = np.nan
-
+    
+    # get bbox coords? 
     for name, section in tqdm(section_groups, desc= "doing something 2"):
         page_num = int(name[0])
         section_id = section.iloc[0]['section_id']
         if section_id in binom_id:
             section_bbox = section.iloc[0]['section_bbox']
             desc_rect = section_bbox
-            binom_section = section[((~(section['1_flags'].apply(is_italic)) & (section['1_words_match_score'] > 0.85)) | 
-                                    (~(section['2_flags'].apply(is_italic)) & (section['2_words_match_score'] > 0.85)) | 
-                                    (~(section['3_flags'].apply(is_italic)) & (section['3_words_match_score'] > 0.85)) | 
-                                    (~(section['1_flags'].apply(is_italic)) & (section['1_words_match_score'] > 0.85)))]
+            binom_section = section[((~(section['1_flags'].apply(is_italic)) & 
+                                      (section['1_words_match_score'] > 0.85)) | 
+                                    (~(section['2_flags'].apply(is_italic)) & 
+                                     (section['2_words_match_score'] > 0.85)) | 
+                                    (~(section['3_flags'].apply(is_italic)) & 
+                                     (section['3_words_match_score'] > 0.85)) | 
+                                    (~(section['1_flags'].apply(is_italic)) & 
+                                     (section['1_words_match_score'] > 0.85)))]
             binom = binom_section.apply(get_binomial, axis = 1).iloc[0]
             binom = "".join(binom)
             num_binom_words = len(binom.split(' '))
@@ -525,7 +457,8 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
             binom_x1 = section.loc[binom_index, 'word_bbox'].apply(lambda x : x[2]).max()
             binom_y1 = section.loc[binom_index, 'word_bbox'].apply(lambda x : x[3]).max()
             binom_rect = fitz.Rect((binom_x0, binom_y0, binom_x1, binom_y1))
-            
+
+            # variables not used downstream. remove? 
             span_num = binom_section.iloc[0]['span_num']
             line_num = binom_section.iloc[0]['line_num']
             block_num = binom_section.iloc[0]['block_num']
@@ -533,11 +466,10 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
             section_shape = volume_word_df.loc[volume_word_df['section_id'] == section_id].shape[0]
             volume_word_df.loc[volume_word_df['section_id'] == section_id, 'binom_name'] = binom
             volume_word_df.loc[(volume_word_df['section_id'] == section_id), 'binom_bbox'] = volume_word_df.loc[(volume_word_df['section_id'] == section_id)].apply(lambda _ : (binom_x0, binom_y0, binom_x1, binom_y1), axis = 1)
-            # this line was not working the normal way ... seems fine now tho so yay
-
+            # this line was not working the normal way ... seems fine now
 
    # %%
-    # DUPLICATE of above 
+    # DUPLICATE of above. remove the above block
     # render PDF of parsed spp entries
     for page_num in tqdm(range(num_pages), desc = "Printing PDF 2"):
         section_groups = volume_word_df[volume_word_df['page_num'] == page_num].groupby('section_id')
@@ -553,7 +485,7 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
             is_L_loc = paragraph.iloc[0]['word'].lower() in ["l.", "l"]
             is_S_loc = paragraph.iloc[0]['word'].lower() in ["s.", "s"]
             # is_Floraison = paragraph.iloc[0]
-
+            # is_aire_geor = paragraph.iloc[0]
             
             c = getColor("lightgray")         # default color 
             if is_L_loc: 
@@ -562,6 +494,9 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
                 c = getColor("pink")
             # if is_Floraison:               # add diff colors for more parts 
             #     c = getColor("purple")
+            # if is_aire_geor:               # add diff colors for more parts 
+            #     c = getColor("purple")
+                        
             if paragraph_section_id in binom_id:
                 r_box = fitz.Rect(paragraph_bbox)
                 annot_rect = page.add_rect_annot(r_box)
@@ -579,7 +514,7 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
                 annot_rect = page.add_rect_annot(r_box)
                 annot_rect.set_colors({"stroke": getColor("violetred4")})
                 annot_rect.update()
-    marked_epithet_fname = f"{output_dir}/{volume}_binom_sections_paragraphs_LS_v1_2.pdf"
+    marked_epithet_fname = f"{output_dir}/main_text/{volume}_binom_sections_paragraphs_LS_v1.pdf"
     volume_doc.save(marked_epithet_fname)
 
 
@@ -600,24 +535,27 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
 
     # %%
     k = 'L.'
-    len(dict_test[k].values())
+    len(dict_test[k].values())   # calculate number of values within a specific key-value pair in dict_test.
 
+    # # print country name (remove)
+    # for country in dict_test.keys():
+    #     for general_loc in dict_test[country]:
+    #         for specific_loc in dict_test[country][general_loc]:
+    #             print(country)
+                
+    # # same as above? print country name
+    # # remove?
+    # [country for country in dict_test.keys() for general_loc in dict_test[country] for specific_loc in dict_test[country][general_loc]]
 
-    for country in dict_test.keys():
-        for general_loc in dict_test[country]:
-            for specific_loc in dict_test[country][general_loc]:
-                print(country)
-
-    [country for country in dict_test.keys() for general_loc in dict_test[country] for specific_loc in dict_test[country][general_loc]]
+    # # %% print general_loc name (remove)
+    # for country in dict_test.keys():
+    #     for general_loc in dict_test[country]:
+    #         for specific_loc in dict_test[country][general_loc]:
+    #             print(general_loc)
 
     # %%
-    for country in dict_test.keys():
-        for general_loc in dict_test[country]:
-            for specific_loc in dict_test[country][general_loc]:
-                print(general_loc)
-
-    # %%
-    all_sections_df = []
+    # final df of parsed localities 
+    all_sections_df = [] # initiate list 
     for section_id in tqdm(sub_loc_dict, desc= "doing something 3"):
         dict_test = sub_loc_dict[section_id]
         dict_else = other_data[section_id]
@@ -659,8 +597,8 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
                 basic_author = [author]* num_loc_data
             elif k == "other":
                 other = [dict_else["other"]] * num_loc_data
-
-        if isinstance(name, str):
+        # if name is a string, create dict
+        if isinstance(name, str):   
             section_data = {'page_num': page_num_data,
                             'binomial': name_data,
                             'basic_author': basic_author,
@@ -672,6 +610,7 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
                             'general_loc':  [general_loc for country in dict_test.keys() for general_loc in dict_test[country] for specific_loc in dict_test[country][general_loc]],
                             'specific_loc': [specific_loc for country in dict_test.keys() for general_loc in dict_test[country] for specific_loc in dict_test[country][general_loc]]
                         }
+            # convert dict to df
             df = pd.DataFrame.from_dict(section_data)
             all_sections_df.append(df)
 
@@ -688,10 +627,8 @@ def process_volume(volume, volume_index_df, volume_word_df, volume_char_df, volu
     # %%
     result_df[result_df['page_num'] == 79]
 
-    # %%
-    result_df.to_csv(f'{output_dir}/{volume}_location_parsed_v4.csv')
-
-
+    # %% save
+    result_df.to_csv(f'{output_dir}/main_text/{volume}_location_parsed_v4.csv')
 
 
 
